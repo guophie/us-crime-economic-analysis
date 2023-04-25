@@ -23,7 +23,7 @@ options(readr.show_col_types = FALSE)
 
 ## Preview of the dataset 
 ```{r, echo = FALSE, message = FALSE}
-DATA = read_csv("FinalData320.csv") %>%
+DATA = read_csv("data.csv") %>%
   rename(prisoner_count_per_million = prisoner_count_per_milion)
 
 head(DATA)
