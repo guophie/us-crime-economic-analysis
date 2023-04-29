@@ -1,0 +1,994 @@
+---
+title: "Final Paper"
+author: "STOR 320.002 Group 14"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(kableExtra)
+library(leaps)
+library(MASS)
+library(caTools)
+library(modelr)
+library(Metrics)
+library(gridExtra)
+library(scales)
+library(dplyr)
+library(broom)
+library(leaps)
+setwd("/Users/guophie/Documents/GitHub/us-crime-economic-analysis")
+options(readr.show_col_types = FALSE)
+DATA <- read.csv("data.csv")
+```
+
+# INTRODUCTION
+
+With 37.9 million Americans—11.9% of the population—living in poverty, economic insecurity continues to be a troubling reality in the United States. Opposing theories to cope with this issue conflict academics and policymakers across the board. Crime further complicates this problem. Economist Gary Stanley Becker suggested the [“economic theory of crime”](https://link.springer.com/referenceworkentry/10.1007/978-1-4614-5690-2_409#:~:text=The%20economic%20theory%20of%20criminal,by%20the%20criminal%20justice%20system), which states that people commit crimes when the costs are lower than the benefits of committing the crime; therefore, poverty creates the conditions that foster crime. Sociologist Robert Merton suggested the [“strain theory”](https://www.britannica.com/topic/strain-theory-sociology), which states that people commit crimes when they are socio-economically alienated. Our group decided to investigate the relationship between poverty and crime using a statistical approach. Ultimately, we hoped to find information valuable to those involved in poverty reduction. 
+
+Our group conducted an analysis of state-level data from 2008 to 2016 with poverty and crime as predictive measures. First, we evaluated if economic indicators of a state in a given year can predict the state's violent crime and property crime totals and which type of crime is a better predictor. Knowing the economic precursors that lead to greater property or violent crime in a state, such as increased government aid or protection, can help identify communities in which preventative measures are needed. We hypothesized economic conditions can predict property and violent crime totals and that property crime would be a better predictor. Second, we determined if we can use a state’s crime data to predict the state’s poverty rate. If this proved to be true, it implies that governments could be successful in reducing crime through poverty relief. If this proved to be false, it indicates that poverty alone is not enough to explain crime and warrants further research. We hypothesized that a state’s crime data can predict its poverty rate. We included numerous different variables in our predictive models in order to control for potential confounders, including but not limited to state minimum wage, median income, unemployment rate, and prison count. The results of our research provide insight into understanding poverty and associated phenomena that can be useful in creating solutions. 
+
+
+# DATA
+
+The datasets we used consisted of information from multiple data sources. To study and draw conclusions from national data, we used datasets from reputable government organizations. Governments collect large amounts of data, so we leveraged this data to understand the relationship between crime and poverty. All datasets, besides the minimum wage set, were collected through national surveys and censuses. Because information originated from government data sources, collection methods are unclear. However, government data collection is the most credible and comprehensive when analyzing the entire country. We compiled 5 datasets including information about crime, poverty, income, unemployment, and minimum wages in all 50 states from 2008-2016. Below is a table that provides insight into the data set; each row represents a state’s data for a particular year.
+
+```{r, include = FALSE}
+library(dbplyr)
+library(tidyverse)
+library(modelr)
+library(broom)
+library(leaps)
+library(gridExtra)
+library(kableExtra)
+options(readr.show_col_types = FALSE)
+```
+
+```{r, include = FALSE, message = FALSE}
+DATATABLE = DATA %>%
+  rename(prisoner_count_per_million = prisoner_count_per_milion)
+```
+
+```{r, echo=FALSE}
+DATA_table = DATATABLE %>%
+  dplyr::select(-c("includes_jails")) %>%
+  dplyr::select(-1) %>%
+  filter(year == 2008) %>%
+  head(12)
+
+
+DATA_table %>%
+  kbl() %>%
+  kable_material(c("striped", "hover")) %>%
+  scroll_box(width = "800px", height = "500px")
+```
+
+
+
+The first dataset [US Minimum Wage by State from 1968 to 2020](https://www.kaggle.com/datasets/lislejoem/us-minimum-wage-by-state-from-1968-to-2017) was found on Kaggle. The data was scraped from the United States Department of Labor's minimum wages by state table. The U.S. Department of Labor is the most credible source of wage statistics because they must gather this information. Wage observations were organized by state and year, and summarized state and federal regulations. This dataset includes economic variables, including state and federal minimum wages: _State.Min.Wage_ and _Fed.Min.Wage_. More variables include _Eff.Min.Wage_the higher wage between federal and state, and _CPI.Average_, the average consumer price index in the given year. Lastly, we used _DOL.Low.Value,_ the State's lowest enforced minimum wage, and _DOL.High.Value_, the State's highest enforced minimum wage - some states enforce different minimum wage laws depending on the business’s size. The dataset included the previous variables adjusted to 2020 dollars, but we chose not to include these variables because we are studying how they change over time. These variables were used to predict violent crime and property crime totals. This establishes if there is a relationship between state economic indicators and crime.
+
+The second dataset [Crime and Incarceration in the United States](https://www.kaggle.com/datasets/christophercorrea/prisoners-and-crime-in-united-states) was also found on Kaggle. State and federal prisoner population figures were scraped from the Bureau of Justice Statistics. The FBI Uniform Crime Reporting (UCR) Program published state crime and population statistics. The FBI collected this information voluntarily submitted by local, state, and federal law enforcement agencies. These sources are the most credible for crime data because the FBI is required to collect this data, and has access to confidential information. We included _prisoner_count_, which was adjusted for population size to _prisoner_count_per_million_. All crime statistics were adjusted to crimes per million residents to ensure equity across all states. Crime variables are as follows: 
+
+* Violent Crimes - _violent_crimes_per_million_
+* Murders and Manslaughters - _murder_manslaughter_per_million_
+* Rapes (using the old definition) - _rape_legacy_per_million_ 
+* Rapes (using the revised definition) - _rape_revised_per_million_
+* Robberies - _robbery_per_million_
+* Aggravated Assaults - _agg_assault_per_million_
+* Property Crime - _property_crime_per_million_
+* Burglaries - _burglary_per_million_
+* Larcenies - _larceny_per_million_
+* Motor Vehicle Thefts - _vehicle_theft_per_million_
+
+Both analysis questions utilized these crime variables. Predictive modeling estimated violent and property crime totals. Comparing predicted crime totals and actual crime totals indicated if economic indicators influence crime. We also used crime data to predict a state’s poverty rate and examined this relationship.
+
+The third dataset [Poverty Rate by Race/Ethnicity](https://www.kff.org/otherhttps://data.world/garyhoov/household-income-by-state/workspace/file?filename=household_median_income_2017.csv/state-indicator/poverty-rate-by-raceethnicity/?dataView=0&currentTimeframe=12&sortModel=%7B%22colId%22:%22Location%22,%22sort%22:%22desc%22%7D) was from the Kaiser Family Foundation website. The company is a nonpartisan source of data, and household incomes were scraped from the 2008-2021 American Community Survey. The household income determined the poverty rates using the U.S. Census Bureau's poverty threshold, which was the information we used in our final dataset. The data represents the total population, and estimates with relative standard errors of more than 30% are denoted as N/A. The variables from this dataset are the poverty rates for each race and ethnicity, including _White_, _Black_, _Hispanic_, _Asian.Native.Hawaiian.and.Pacific.Islander_, _American.Indian.Alaska.Native_, and _Multiple.Races_. Each row displays a state’s poverty rates divided into races and ethnicities. The final variable is _Total_, representing the total poverty rate for a given state. Poverty rate variables were used as economic indicators to predict violent crime and property crime totals. The models were differentiated by race and ethnicity, as poverty variables were used to determine if the poverty rate of a race had an effect on crime. Next, we tested if crime data could be used to predict a state’s total poverty rate. By comparing predicted and actual values, we were able to determine if crime influences poverty.
+
+The fourth dataset [Household Income by State](http://census.gov/data/tables/time-series/demo/income-poverty/historical-income-households.html) was found on Data World and scraped from the United States Census Bureau. The Census Bureau surveyed and collected data from direct respondents, federal, state, and local governments, and commercial entities. The Census Bureau is the most reliable source of income information because they sample a large portion of the country, so their data is accurate. The variable in this data set is median household income by state, _median_income_. The median income variable was used as one economic indicator to predict crime totals. The final data set [Annual Unemployment Rates by State](https://www.icip.iastate.edu/tables/employment/unemployment-states) was sourced from Local Area Unemployment Statistics by the U.S. Bureau of Labor Statistics. Because unemployment insurance records relate only to people who have applied for such benefits, and since it is impractical to count every unemployed person each month, the government conducts a monthly survey to measure the extent of unemployment in the country. The critical variable in this dataset is _unemployment_rate_, which is the state’s unemployment rate in a given year. The unemployment rate variable was used as another economic indicator to predict crime totals. 
+
+We compiled 5 datasets including information about crime, poverty, income, unemployment, and minimum wages. Poverty rates, median income, unemployment rates, and minimum wages are all economic indicators of a state and were analyzed to predict violent crime and property crime totals. By evaluating the validity of these models, we determine the relationship between specific economic indicators and crime. Furthermore, we used crime data to predict a state’s poverty rate, so we can better understand how crime and poverty impact one another. By using comprehensive data from reliable sources, we can properly evaluate these research questions. 
+
+```{r, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(readr)
+library(usmap)
+library(paletteer)
+library(gridExtra)
+```
+
+```{r, echo=FALSE}
+MAPDATA <- DATA %>%
+  rename(prisoner_count_per_million = prisoner_count_per_milion)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+mapdata <- MAPDATA %>%
+  rename(State = jurisdiction) %>%
+  mutate(Violent_Property = violent_crime_per_million + property_crime_per_million,
+         fips = fips(State))
+PLOT1 = plot_usmap(data = mapdata, values = "Violent_Property", color = "black") +
+  scale_fill_distiller(direction = 1, name = "Violent and Property Crime per Million", palette = "Reds") + 
+  theme(legend.position = "right") +
+  ggtitle("Violent and Property Crime per Million by State, 2008-2016 Avg.") 
+```
+
+```{r, echo=FALSE, warning=FALSE}
+PLOT2 = plot_usmap(data = mapdata, values = "Total", color = "black") +
+  scale_fill_distiller(direction = 1, name = "Poverty Rate", palette = "Reds") + 
+  theme(legend.position = "right") +
+  ggtitle("Poverty Rate by State, 2008-2016 Avg.")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+mapdata2016 <- MAPDATA %>%
+  rename(State = jurisdiction) %>%
+  filter(year == 2016) %>%
+  mutate(Violent_Property = violent_crime_per_million + property_crime_per_million,
+         fips = fips(State))
+PLOT3 = plot_usmap(data = mapdata2016, values = "Violent_Property", color = "black") +
+  scale_fill_distiller(direction = 1, name = "Violent and Property Crime per Million", palette = "Reds") + 
+  theme(legend.position = "right") +
+  ggtitle("Violent and Property Crime per Million by State in 2016")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+PLOT4 = plot_usmap(data = mapdata2016, values = "Total", color = "black") +
+  scale_fill_distiller(direction = 1, name = "Poverty Rate", palette = "Reds") + 
+  theme(legend.position = "right") +
+  ggtitle("Poverty Rate by State in 2016")
+```
+
+```{r, include=FALSE}
+matrix(c(1, 3, 2, 4),ncol=2)
+LAYOUT=matrix(c(1,2, 3, 4),ncol=2)
+```
+
+```{r, eval=T, echo=FALSE, fig.height = 6, fig.width=12, fig.align='center'}
+grid.arrange(PLOT1, PLOT2, PLOT3, PLOT4, layout_matrix=LAYOUT)
+```
+
+
+# RESULTS
+
+### Question 1: Can we use economic indicators of a state in a given year to predict its violent crime and property crime totals? If so, which type of crime are the indicators a better predictor of?
+
+The first question we analyzed, as previously mentioned, involved assessing economic indicators as predictors of violent and property crime. Therefore, we created two different sets of predictive models - one predicting violent crime and one predicting property crime. We used several steps and methods to analyze and answer this question. First, we created a testing and training dataset to evaluate the models we would later create. We also utilized a stepwise regression method in order to predict the two types of crime we were focused on: property crime and violent crime. This stepwise regression method involved iteratively adding and removing various economic indicator variables that served as predictors. The predictions of these two models can be seen in the plots below:
+
+```{r, echo=FALSE}
+# Set seed for reproducibility
+set.seed(320)
+DATA <- DATA %>%
+  rename(prisoner_count_per_million = prisoner_count_per_milion)
+#split into train and test
+sample1 <- sample.split(DATA$jurisdiction, SplitRatio = 0.80)
+final.train <- subset(DATA, sample1 == TRUE)
+final.test <- subset(DATA, sample1 == FALSE)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#correlation matrix
+correlations <- DATA %>%
+  na.exclude() %>%
+  dplyr::select(-c("X", "jurisdiction", "includes_jails")) %>%
+  cor()
+```
+
+```{r, echo=FALSE}
+#remove violent crime columns to take away perfect predictors and limit colinearity
+final.train.violent <- final.train %>%
+  dplyr::select(-c("X","murder_manslaughter_per_million", "rape_legacy_per_million", "rape_revised_per_million", "robbery_per_million", "agg_assault_per_million", "burglary_per_million", "larceny_per_million", "vehicle_theft_per_million", "property_crime_per_million", "includes_jails", "jurisdiction")) %>%
+  na.exclude()
+#same for test set
+final.test.violent <- final.test %>%
+  dplyr::select(-c("X","murder_manslaughter_per_million", "rape_legacy_per_million", "rape_revised_per_million", "robbery_per_million", "agg_assault_per_million", "burglary_per_million", "larceny_per_million", "vehicle_theft_per_million", "property_crime_per_million", "includes_jails", "jurisdiction")) %>%
+  na.exclude()
+# Fit the full model 
+violent.model <- lm(violent_crime_per_million ~., data = final.train.violent, na.action = na.exclude)
+#Stepwise regression model
+violent.step.model <- stepAIC(violent.model, direction = "both", trace = FALSE)
+#calculate RMSE, MSE and Rsq of violent model
+RMSE.violent <- sqrt(mean(violent.step.model$residuals^2))
+MSE.violent <- mean(violent.step.model$residuals^2)
+ADJ.RSQ.violent <- summary(violent.step.model)$adj.r.squared
+```
+
+```{r, echo=FALSE}
+#remove property crime columns to take away perfect predictors and total column for colinearity
+final.train.property <- final.train %>%
+  dplyr::select(-c("X","murder_manslaughter_per_million", "rape_legacy_per_million", "rape_revised_per_million", "robbery_per_million", "agg_assault_per_million", "burglary_per_million", "larceny_per_million", "vehicle_theft_per_million", "violent_crime_per_million", "includes_jails", "jurisdiction")) %>%
+  na.exclude()
+#same for test set
+final.test.property <- final.test %>%
+  dplyr::select(-c("X","murder_manslaughter_per_million", "rape_legacy_per_million", "rape_revised_per_million", "robbery_per_million", "agg_assault_per_million", "burglary_per_million", "larceny_per_million", "vehicle_theft_per_million", "violent_crime_per_million", "includes_jails", "jurisdiction")) %>%
+  na.exclude()
+# Fit the full model 
+property.model <- lm(property_crime_per_million ~., data = final.train.property, na.action = na.exclude)
+#Stepwise regression model
+property.step.model <- stepAIC(property.model, direction = "both", trace = FALSE)
+#calculate RMSE, MSE and Rsq of violent model
+RMSE.property <- sqrt(mean(property.step.model$residuals^2))
+MSE.property <- mean(property.step.model$residuals^2)
+ADJ.RSQ.property <- summary(property.step.model)$adj.r.squared
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#added predictions
+final.train.violent2 <- final.train.violent %>%
+  add_predictions(violent.step.model,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.violent2 <- final.test.violent %>%
+  add_predictions(violent.step.model,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one dataset again
+predictions.violent <- rbind(final.train.violent2, final.test.violent2)
+
+#plot predictions for violent crime vs actual
+predicted_violent_graph = predictions.violent %>%
+  ggplot(aes(violent_crime_per_million, linpred, color = Split)) +
+  geom_point() +
+  geom_abline(intercept=0, slope=1) +
+  xlab("Violent Crime Total") +
+  ylab("Predicted Violent Crime Total") +
+  ggtitle("Predicted Violent Crime Total vs Actual Totals for States: Stepwise") +
+  guides(color=guide_legend(title= "Dataset")) +
+  scale_color_manual(values=c("darkred", "tan")) +
+  theme_minimal()
+
+predicted_violent_graph
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#added predictions
+final.train.property2 <- final.train.property %>%
+  add_predictions(property.step.model,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.property2 <- final.test.property %>%
+  add_predictions(property.step.model,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one dataset again
+predictions.property <- rbind(final.train.property2, final.test.property2)
+
+#plot predictions for property crime vs actual
+predicted_property_graph = predictions.property %>%
+  ggplot(aes(property_crime_per_million, linpred, color = Split)) +
+  geom_point() +
+  geom_abline(intercept=0, slope=1) +
+  xlab("Property Crime Total") +
+  ylab("Predicted Property Crime Total") +
+  ggtitle("Predicted Property Crime Total vs Actual Totals for States: Stepwise") +
+  guides(color=guide_legend(title= "Dataset")) +
+  scale_color_manual(values=c("darkred", "tan")) +
+  theme_minimal()
+predicted_property_graph
+```
+
+```{r, echo=FALSE}
+# calculate MAE
+MAE.violent <- mae(predictions.violent$violent_crime_per_million, predictions.violent$linpred)
+MAE.property <- mae(predictions.property$property_crime_per_million, predictions.property$linpred)
+#create df with RMSE, MSE and Rsq for each model
+compare.fit <- data.frame(MSE = c(MSE.violent, MSE.property),
+                 RMSE = c(RMSE.violent, RMSE.property),
+                 MAE = c(MAE.violent, MAE.property),
+                 `Adjusted R-Squared` = c(ADJ.RSQ.violent, ADJ.RSQ.property))
+rownames(compare.fit) <- c("Violent Crime Model", "Property Crime Model")
+#html table of df
+comparisons = compare.fit %>%
+  kbl(caption = "Comparsion of MSE, RMSE, MAE, Adjusted R-Squared: Stepwise Models") %>%
+  kable_styling()
+comparisons
+```
+
+The stepwise models were decent models based on MAE, MSE, RMSE, and Adjusted R-Squared, however, they had a lot of  independent variables. In an attempt to reduce collinearity and simplify these models, it would be helpful to see if different models could be constructed with only those variables that were high predictors of our dependent variables. We used the statistical significance, or p-value, of these predictor variables to create different combinations for new predictive models of violent and property crime. The new models for predicting violent crime were:
+
+**v1**:violent_crime_per_million ~ State.Min.Wage + CPI.Average + median_income + unemployment_rate + Total
+
+**v2**:violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + median_income + unemployment_rate + Total
+
+**v3**:violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + White
+
+**v4**: violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Black
+
+**v5**: violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Hispanic
+
+**v6**: violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Asian.Native.Hawaiian.and.Pacific.Islander
+
+**v7**: violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + American.Indian.Alaska.Native
+
+**v8**: violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Multiple.Races
+
+The model that predicts violent crime most accurately is v4. The formula for this model is violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Black. Therefore, a state’s minimum wage, prisoner count, unemployment rate, median income, and poverty rate for black residents are the strongest indicators of violent crime. We created a total of 8 different models to try and best predict violent crime per million, and model v4 was proven to be the most accurate. We determined this based on a number of accuracy and error metrics. We created functions to compute the following accuracy metrics: mean square error (MSE), root mean square error (RMSE), mean absolute error (MAE), and adjusted r-squared. The MSE, RMSE, and MAE were used to gauge the magnitude of the errors of our model. The adjusted r-squared metric accounts for the number of predictor variables, and is similarly a measure of how well our models fit the data. We then assessed the models based on these values, and came to the conclusion that model v4 was the most accurate and included the best predictor variables. For model v4, the MSE was 878112.1, the RMSE was 937.0764, the MAE was 752.5441, and the adjusted r-squared was 0.4049073. The error metrics were all either the lowest or second-lowest of the models and the adjusted r-squared was the highest of the eight models. The accuracy metrics of all the models we created can be seen in the plots provided. 
+
+```{r, echo =F}
+# base model to predict violent crimes from economic indicators
+violent1 <- lm(violent_crime_per_million ~ State.Min.Wage + CPI.Average + median_income + unemployment_rate + Total, data = final.train.violent)
+
+#add predictions
+final.train.v1 <- final.train.violent %>%
+  add_predictions(violent1,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.v1 <- final.test.violent %>%
+  add_predictions(violent1,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.v1 <- rbind(final.train.v1, final.test.v1)
+
+RMSE.v1 <- sqrt(mean(violent1$residuals^2))
+MSE.v1 <- mean(violent1$residuals^2)
+ADJ.RSQ.v1 <- summary(violent1)$adj.r.squared
+MAE.v1 <- mae(predictions.v1$violent_crime_per_million, predictions.v1$linpred)
+```
+
+```{r, echo=FALSE}
+# second model to predict violent crimes from economic indicators adding prisoner count and taking out CPI
+violent2 <- lm(violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Total, data = final.train.violent)
+
+#add predictions
+final.train.v2 <- final.train.violent %>%
+  add_predictions(violent2,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.v2 <- final.test.violent %>%
+  add_predictions(violent2,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.v2 <- rbind(final.train.v2, final.test.v2)
+
+RMSE.v2 <- sqrt(mean(violent2$residuals^2))
+MSE.v2 <- mean(violent2$residuals^2)
+ADJ.RSQ.v2 <- summary(violent2)$adj.r.squared
+MAE.v2 <- mae(predictions.v2$violent_crime_per_million, predictions.v2$linpred)
+```
+
+```{r, echo=FALSE}
+# third model to predict violent crimes from economic indicators changing total poverty rate to white poverty rate
+violent3 <- lm(violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + White, data = final.train.violent)
+
+#add predictions
+final.train.v3 <- final.train.violent %>%
+  add_predictions(violent3,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.v3 <- final.test.violent %>%
+  add_predictions(violent3,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.v3 <- rbind(final.train.v3, final.test.v3)
+
+RMSE.v3 <- sqrt(mean(violent3$residuals^2))
+MSE.v3 <- mean(violent3$residuals^2)
+ADJ.RSQ.v3 <- summary(violent3)$adj.r.squared
+MAE.v3 <- mae(predictions.v3$violent_crime_per_million, predictions.v3$linpred)
+```
+
+```{r, echo=FALSE}
+# fourth model to predict violent crimes from economic indicators changing total poverty rate to black poverty rate
+violent4 <- lm(violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Black, data = final.train.violent)
+
+#add predictions
+final.train.v4 <- final.train.violent %>%
+  add_predictions(violent4,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.v4 <- final.test.violent %>%
+  add_predictions(violent4,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.v4 <- rbind(final.train.v4, final.test.v4)
+
+RMSE.v4 <- sqrt(mean(violent4$residuals^2))
+MSE.v4 <- mean(violent4$residuals^2)
+ADJ.RSQ.v4 <- summary(violent4)$adj.r.squared
+MAE.v4 <- mae(predictions.v4$violent_crime_per_million, predictions.v4$linpred)
+```
+
+```{r, echo=FALSE}
+# fifth model to predict violent crimes from economic indicators changing total poverty rate to hispanic poverty rate
+violent5 <- lm(violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Hispanic, data = final.train.violent)
+
+#add predictions
+final.train.v5 <- final.train.violent %>%
+  add_predictions(violent5,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.v5 <- final.test.violent %>%
+  add_predictions(violent5,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.v5 <- rbind(final.train.v5, final.test.v5)
+
+RMSE.v5 <- sqrt(mean(violent5$residuals^2))
+MSE.v5 <- mean(violent5$residuals^2)
+ADJ.RSQ.v5 <- summary(violent5)$adj.r.squared
+MAE.v5 <- mae(predictions.v5$violent_crime_per_million, predictions.v5$linpred)
+```
+
+```{r,echo=FALSE}
+# sixth model to predict violent crimes from economic indicators changing total poverty rate to asian, and pacific islander poverty rate
+violent6 <- lm(violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Asian.Native.Hawaiian.and.Pacific.Islander, data = final.train.violent)
+
+#add predictions
+final.train.v6 <- final.train.violent %>%
+  add_predictions(violent6,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.v6 <- final.test.violent %>%
+  add_predictions(violent6,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.v6 <- rbind(final.train.v6, final.test.v6)
+
+RMSE.v6 <- sqrt(mean(violent6$residuals^2))
+MSE.v6 <- mean(violent6$residuals^2)
+ADJ.RSQ.v6 <- summary(violent6)$adj.r.squared
+MAE.v6 <- mae(predictions.v6$violent_crime_per_million, predictions.v6$linpred)
+```
+
+```{r, echo=FALSE}
+# seventh model to predict violent crimes from economic indicators changing total poverty rate to native american poverty rate
+violent7 <- lm(violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + American.Indian.Alaska.Native, data = final.train.violent)
+
+#add predictions
+final.train.v7 <- final.train.violent %>%
+  add_predictions(violent7,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.v7 <- final.test.violent %>%
+  add_predictions(violent7,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.v7 <- rbind(final.train.v7, final.test.v7)
+
+RMSE.v7 <- sqrt(mean(violent7$residuals^2))
+MSE.v7 <- mean(violent7$residuals^2)
+ADJ.RSQ.v7 <- summary(violent7)$adj.r.squared
+MAE.v7 <- mae(predictions.v7$violent_crime_per_million, predictions.v7$linpred)
+```
+
+```{r, echo=FALSE}
+# eighth model to predict violent crimes from economic indicators changing total poverty rate to multiple races poverty rate
+violent8 <- lm(violent_crime_per_million ~ State.Min.Wage + prisoner_count_per_million + unemployment_rate + median_income + Multiple.Races, data = final.train.violent)
+
+#add predictions
+final.train.v8 <- final.train.violent %>%
+  add_predictions(violent8,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.v8 <- final.test.violent %>%
+  add_predictions(violent8,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.v8 <- rbind(final.train.v8, final.test.v8)
+
+RMSE.v8 <- sqrt(mean(violent8$residuals^2))
+MSE.v8 <- mean(violent8$residuals^2)
+ADJ.RSQ.v8 <- summary(violent8)$adj.r.squared
+MAE.v8 <- mae(predictions.v8$violent_crime_per_million, predictions.v8$linpred)
+```
+
+```{r, echo=FALSE}
+# create df with MSE, RMSE, MAE and adj r squared for all 8 violent crime models
+compare.violent <- data.frame(
+                 MSE = 
+                   c(MSE.v1, MSE.v2, MSE.v3, MSE.v4, MSE.v5, MSE.v6, MSE.v7, MSE.v8),
+                 RMSE = 
+                   c(RMSE.v1, RMSE.v2, RMSE.v3, RMSE.v4, RMSE.v5, RMSE.v6, RMSE.v7, RMSE.v8),
+                 MAE = 
+                   c(MAE.v1, MAE.v2, MAE.v3, MAE.v4, MAE.v5, MAE.v6, MAE.v7, MAE.v8),
+                 `Adjusted R-Squared` = 
+                   c(ADJ.RSQ.v1, ADJ.RSQ.v2, ADJ.RSQ.v3, ADJ.RSQ.v4, ADJ.RSQ.v5, 
+                     ADJ.RSQ.v6, ADJ.RSQ.v7,ADJ.RSQ.v8))
+rownames(compare.violent) <- c("v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8")
+compare.violent <- compare.violent %>%
+  mutate(Model = c("v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"))
+
+#make plots
+MSE.plot.violent <- compare.violent %>%
+  ggplot(aes(Model, MSE)) +
+  geom_bar(stat = "identity", fill = c("darkred", "tan", "darkred", "tan", "darkred", "tan", "darkred", "tan")) +
+  ggtitle("MSE, Violent Crime Models") +
+  scale_y_continuous(labels = unit_format(unit = "K", scale = 1e-3)) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+RMSE.plot.violent <- compare.violent %>%
+  ggplot(aes(Model, RMSE)) +
+  geom_bar(stat = "identity", fill = c("darkred", "tan", "darkred", "tan", "darkred", "tan", "darkred", "tan")) +
+  ggtitle("RMSE, Violent Crime Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+MAE.plot.violent <- compare.violent %>%
+  ggplot(aes(Model, MAE)) +
+  geom_bar(stat = "identity", fill = c("darkred", "tan", "darkred", "tan", "darkred", "tan", "darkred", "tan")) +
+  ggtitle("MAE, Violent Crime Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+ADJRSQ.plot.violent <- compare.violent %>%
+  ggplot(aes(Model, Adjusted.R.Squared)) +
+  geom_bar(stat = "identity", fill = c("darkred", "tan", "darkred", "tan", "darkred", "tan", "darkred", "tan")) +
+  ggtitle("Adj. R-Squared, Violent Crime Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+
+#html table
+compare.violent %>%
+  kbl(caption = "Comparsion of MSE, RMSE, MAE, Adjusted R-Squared: Violent Crime Models") %>%
+  kable_styling()
+# arranged plots of each
+grid.arrange(MSE.plot.violent, RMSE.plot.violent, MAE.plot.violent, ADJRSQ.plot.violent,
+             layout_matrix=matrix(c(1,3,2,4),ncol=2))
+```
+
+```{r, echo=FALSE}
+predictions.v4 %>%
+  ggplot(aes(violent_crime_per_million, linpred, color = Split)) +
+  geom_point() +
+  geom_abline(intercept=0, slope=1) +
+  xlab("Violent Crime Total") +
+  ylab("Predicted Violent Crime Total") +
+  ggtitle("Predicted Violent Crime Total vs Actual Totals for States: Model v4") +
+  guides(color=guide_legend(title= "Dataset")) +
+  scale_color_manual(values=c("darkred", "tan")) +
+  theme_minimal()
+```
+
+```{r, echo=FALSE}
+# base model to predict property crimes from economic indicators
+property1 <- lm(property_crime_per_million ~ State.Min.Wage + CPI.Average + median_income + unemployment_rate + Total, data = final.train.property)
+
+#add predictions
+final.train.p1 <- final.train.property %>%
+  add_predictions(property1,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.p1 <- final.test.property %>%
+  add_predictions(property1,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.p1 <- rbind(final.train.p1, final.test.p1)
+
+RMSE.p1 <- sqrt(mean(property1$residuals^2))
+MSE.p1 <- mean(property1$residuals^2)
+ADJ.RSQ.p1 <- summary(property1)$adj.r.squared
+MAE.p1 <- mae(predictions.p1$property_crime_per_million, predictions.p1$linpred)
+```
+
+```{r, echo=FALSE}
+# second model to predict property crimes from economic indicators dropping median income and adding fed min wage
+property2 <- lm(property_crime_per_million ~ State.Min.Wage + CPI.Average + Fed.Min.Wage + unemployment_rate + Total, data = final.train.property)
+
+#add predictions
+final.train.p2 <- final.train.property %>%
+  add_predictions(property2,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.p2 <- final.test.property %>%
+  add_predictions(property2,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.p2 <- rbind(final.train.p2, final.test.p2)
+
+RMSE.p2 <- sqrt(mean(property2$residuals^2))
+MSE.p2 <- mean(property2$residuals^2)
+ADJ.RSQ.p2 <- summary(property2)$adj.r.squared
+MAE.p2 <- mae(predictions.p2$property_crime_per_million, predictions.p2$linpred)
+```
+
+```{r, echo=FALSE}
+# third model to predict property crimes from economic indicators dropping median income and adding prisoner count per million
+property3 <- lm(property_crime_per_million ~ State.Min.Wage + CPI.Average + unemployment_rate + prisoner_count_per_million + Total, data = final.train.property)
+
+#add predictions
+final.train.p3 <- final.train.property %>%
+  add_predictions(property3,var="linpred") %>%
+  mutate(Split = rep("Train", 214))
+final.test.p3 <- final.test.property %>%
+  add_predictions(property3,var="linpred") %>%
+  mutate(Split = rep("Test", 64))
+
+#combined test and train into one data set again
+predictions.p3 <- rbind(final.train.p3, final.test.p3)
+
+RMSE.p3 <- sqrt(mean(property3$residuals^2))
+MSE.p3 <- mean(property3$residuals^2)
+ADJ.RSQ.p3 <- summary(property3)$adj.r.squared
+MAE.p3 <- mae(predictions.p3$property_crime_per_million, predictions.p3$linpred)
+```
+
+The same process was used to construct different property crime models. The new models for predicting property crimes were: 
+
+**p1:** property_crime_per_million ~ State.Min.Wage + CPI.Average + median_income + unemployment_rate + Total
+
+**p2:** property_crime_per_million ~ State.Min.Wage + CPI.Average + Fed.Min.Wage + unemployment_rate + Total
+
+**p3:** property_crime_per_million ~ State.Min.Wage + CPI.Average + unemployment_rate + prisoner_count_per_million + Total
+
+The best property crime model is p3. The formula for this model is property_crime_per_million ~ State.Min.Wage + CPI.Average + unemployment_rate + prisoner_count_per_million + Total. Therefore, a state’s minimum wage, consumer price index, unemployment rate, prisoner count, and overall poverty rate are the strongest indicators of a state’s property crime. We created three different models to try and best predict property crime per million. We similarly used the p-values of various independent variables to create these models. The same base variables were used in model p1 as model v1 to represent different economic indicators.  Variables were also selected in order to minimize collinearity between predictors, and to avoid redundancy and overfitting in models. The base independent variables in the property crime models were all significant except for median income which is why this variable was substituted, however the substitutions did not do much to change the overall quality of the model as seen in the MSE, RMSE, MAE and Adjusted R-Squared comparison.
+
+We used the same accuracy metrics for these models, which are MSE, RMSE, MAE, and adjusted r-squared. We selected this model as the best because it has the lowest MSE, RMSE, and MAE, and the largest adjusted r-squared. The MSE was 18762275, the RMSE was 4331.544, the MAE was 3331.059, and the adjusted r-squared was 0.4554253. Since we are predicting very large values, it makes sense that the error values are rather large. While these were relatively the best accuracy metrics, they did not vary much from the other models. 
+
+
+```{r, echo=F}
+# make df from property crime models MSE, RMSE, MAE, Adjusted R-Squared
+compare.property <- data.frame(
+                 MSE = 
+                   c(MSE.p1, MSE.p2, MSE.p3),
+                 RMSE = 
+                   c(RMSE.p1, RMSE.p2, RMSE.p3),
+                 MAE = 
+                   c(MAE.p1, MAE.p2, MAE.p3),
+                 `Adjusted R-Squared` = 
+                   c(ADJ.RSQ.p1, ADJ.RSQ.p2, ADJ.RSQ.p3))
+rownames(compare.property) <- c("p1", "p2", "p3")
+compare.property <- compare.property %>%
+  mutate(Model = c("p1", "p2", "p3"))
+
+#make plots
+MSE.plot.property <- compare.property %>%
+  ggplot(aes(Model, MSE)) +
+  geom_bar(stat = "identity", fill = c("darkred", "tan", "darkred")) +
+  ggtitle("MSE, Property Crime Models") +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+RMSE.plot.property <- compare.property %>%
+  ggplot(aes(Model, RMSE)) +
+  geom_bar(stat = "identity", fill = c("darkred", "tan", "darkred")) +
+  ggtitle("RMSE, Property Crime Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+MAE.plot.property <- compare.property %>%
+  ggplot(aes(Model, MAE)) +
+  geom_bar(stat = "identity", fill = c("darkred", "tan", "darkred")) +
+  ggtitle("MAE, Property Crime Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+ADJRSQ.plot.property <- compare.property %>%
+  ggplot(aes(Model, Adjusted.R.Squared)) +
+  geom_bar(stat = "identity", fill = c("darkred", "tan", "darkred")) + 
+  ggtitle("Adj. R-Squared, Property Crime Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+
+#html table
+compare.property %>%
+  kbl(caption = "Comparsion of MSE, RMSE, MAE, Adjusted R-Squared: Property Crime Models") %>%
+  kable_styling()
+# arrange plots
+grid.arrange(MSE.plot.property, RMSE.plot.property, MAE.plot.property, ADJRSQ.plot.property,
+             layout_matrix=matrix(c(1,3,2,4),ncol=2))
+```
+
+```{r, echo=FALSE}
+predictions.p3 %>%
+  ggplot(aes(property_crime_per_million, linpred, color = Split)) +
+  geom_point() +
+  geom_abline(intercept=0, slope=1) +
+  xlab("Property Crime Total") +
+  ylab("Predicted Property Crime Total") +
+  ggtitle("Predicted Property Crime Total vs Actual Totals for States: Model p3") +
+  guides(color=guide_legend(title= "Dataset")) +
+  scale_color_manual(values=c("darkred", "tan")) +
+  theme_minimal()
+```
+
+In summary, our methods and analysis led us to believe that the best variables from our dataset to predict violent crime are a state’s minimum wage, prisoner count per million people, unemployment rate, median household income, and the poverty rate among the Black population. Similarly, the best variables to predict property crime, within our dataset, are a state’s minimum wage, CPI average, unemployment rate, prisoner count per million people, and total poverty rate. With all this being said, both of our best models are only moderately accurate and could definitely be improved with the use of predictor variables from other areas. Based on our models, the economic indicators are not perfect predictors of crime in a state, however, they have shown to be statistically significant in predicting crime totals in a state. While both models only explained about 40% of the variance in each dependent variable, the economic indicators of a state were shown to be slightly better at predicting property crime per million than violent crime per million.
+
+### Question 2: Can we use crime data to predict a state's poverty rate?
+
+The second question we analyzed involved assessing crime data as an indicator of a state’s poverty rate. We similarly utilized stepwise regression in order to answer this question. For this question, we used no-way interaction and two-way interaction stepwise regression models in order to guide us in selecting significant predictor variables. The no-way interaction model provided us with the individual significance of each predictor variable, which allowed us to evaluate them independently. We created the two-way interaction model to account for the potential interactions between variables in predicting the poverty rate. The models were
+
+The stepwise regression model (no-way interactions) = lm(Total~burglary_per_million + property_crime_per_million + murder_manslaughter_per_million + robbery_per_million + rape_legacy_per_million + prisoner_count_per_million, data = model_data). 
+Stepwise regression model (2-way interactions) = lm(Total ~ burglary_per_million + property_crime_per_million + murder_manslaughter_per_million + robbery_per_million + rape_legacy_per_million + violent_crime_per_million + agg_assault_per_million + murder_manslaughter_per_million:robbery_per_million + burglary_per_million:property_crime_per_million + rape_legacy_per_million:violent_crime_per_million + murder_manslaughter_per_million:agg_assault_per_million + burglary_per_million:murder_manslaughter_per_million + violent_crime_per_million:agg_assault_per_million)
+
+By running the lm function, we found all coefficients for the variables for the line of best fit. Next, we cross-validated by splitting the data and fitting the model. Finally, we compared these fitted values to the actual values in the test dataset and found the RMSE, MSE, MAE, and R-Squared.
+
+```{r, include = FALSE}
+# Error metrics for regression model evaluation 
+MSE.func = function(resid){
+  return(mean(resid^2))
+}
+
+RMSE.func = function(resid){
+  return(sqrt(mean(resid^2)))
+}
+
+MAE.func = function(resid){
+  return(mean(abs(resid)))
+}
+```
+
+```{r, include = FALSE}
+model_data = DATA %>%
+  dplyr::select(-c(1:12, 17, 24:29, 31)) %>%
+  na.exclude() 
+```
+```{r, include = FALSE}
+Full = lm(Total~., data = model_data)
+none = lm(Total~1, data = model_data)
+MSE = (summary(Full)$sigma)^2
+
+step(none, scope=list(upper=Full), scale = MSE, trace = FALSE)
+```
+
+```{r, include = FALSE}
+stepwise_model = lm(Total~burglary_per_million + property_crime_per_million + murder_manslaughter_per_million + robbery_per_million + rape_legacy_per_million + prisoner_count_per_million, data = model_data)
+
+stepwise_model
+```
+
+```{r, warning = FALSE, include = FALSE}
+# Cross-Validation: Splitting the data and fitting the model
+train.model.func=function(data){
+  mod = lm(Total~burglary_per_million + property_crime_per_million + murder_manslaughter_per_million + robbery_per_million + rape_legacy_per_million + prisoner_count_per_million, data = data)
+  return(mod)
+}
+
+model_data2 = model_data %>%
+  crossv_kfold(5) %>%
+  mutate(tr.model = map(train, train.model.func),
+        predict = map2(test, tr.model, ~augment(.y,newdata=.x))) %>%
+        dplyr::select(predict) %>%
+        unnest()
+```
+
+```{r, include = FALSE}
+Full2 = lm(Total~.*., data = model_data)
+none2 = lm(Total~1, data = model_data)
+MSE2 = (summary(Full)$sigma)^2
+
+step(none2, scope=list(upper=Full2), scale = MSE2, trace = FALSE)
+```
+
+```{r, include = FALSE}
+stepwise_2way_model = lm(Total ~ burglary_per_million + property_crime_per_million + 
+    murder_manslaughter_per_million + robbery_per_million + rape_legacy_per_million + 
+    violent_crime_per_million + agg_assault_per_million + murder_manslaughter_per_million:robbery_per_million + 
+    burglary_per_million:property_crime_per_million + rape_legacy_per_million:violent_crime_per_million + 
+    murder_manslaughter_per_million:agg_assault_per_million + 
+    burglary_per_million:murder_manslaughter_per_million + violent_crime_per_million:agg_assault_per_million, 
+    data = model_data)
+
+stepwise_2way_model
+```
+
+```{r, warning = FALSE, include = FALSE}
+# Cross-Validation: Splitting the data and fitting the model
+train.model.func2=function(data){
+  mod = lm(Total ~ burglary_per_million + property_crime_per_million + 
+    murder_manslaughter_per_million + robbery_per_million + rape_legacy_per_million + 
+    violent_crime_per_million + agg_assault_per_million + murder_manslaughter_per_million:robbery_per_million + 
+    burglary_per_million:property_crime_per_million + rape_legacy_per_million:violent_crime_per_million + 
+    murder_manslaughter_per_million:agg_assault_per_million + 
+    burglary_per_million:murder_manslaughter_per_million + violent_crime_per_million:agg_assault_per_million, 
+    data = data)
+  return(mod)
+}
+
+model_data3 = model_data %>%
+  crossv_kfold(5) %>%
+  mutate(tr.model = map(train, train.model.func2),
+        predict = map2(test, tr.model, ~augment(.y,newdata=.x))) %>%
+        dplyr::select(predict) %>%
+        unnest()
+```
+
+```{r, echo = FALSE}
+# Stepwise (no-way) Model Plot
+stepwise_model_line = lm(.fitted~Total, data = model_data2)
+B0 = summary(stepwise_model_line)$coef[1]
+B1 = summary(stepwise_model_line)$coef[2]
+  
+ggplot(model_data2) +
+  geom_point(aes(x= Total, y = .fitted)) + 
+  geom_abline(intercept = B0, slope = B1, col = "darkred") +
+  geom_abline(intercept = 0, slope = 1, col = "tan") + 
+  xlab("Actual Poverty Rate") + ylab("Predicted Poverty Rate") +
+  ggtitle("Stepwise regression (no-way) model") +
+  theme_minimal()
+
+# Stepwise (2-way) Model Plot
+stepwise_2way_model_line = lm(.fitted~Total, data = model_data3)
+B0_2 = summary(stepwise_2way_model_line)$coef[1]
+B1_2 = summary(stepwise_2way_model_line)$coef[2]
+  
+ggplot(model_data3) +
+  geom_point(aes(x= Total, y = .fitted)) + 
+  geom_abline(intercept = B0_2, slope = B1_2, col = "darkred") +
+  geom_abline(intercept = 0, slope = 1, col = "tan") + 
+  xlab("Actual Poverty Rate") + ylab("Predicted Poverty Rate") +
+  ggtitle("Stepwise regression (2-way) model") +
+  theme_minimal()
+```
+
+The stepwise regression model with two-way interactions outperformed the stepwise regression model with no-way interactions. The line of best fit (dark red) for the two-way model more closely matches the line of perfect prediction (tan) compared to those of the no-way model. The stepwise models also had low error statistics. Although both stepwise models performed well based on their MAE, MSE, RMSE, and Adjusted R-Squared, they consisted of too many variables, subjecting them to issues of multicollinearity. In order to find simpler, still decent models, we assessed five multiple regression models with two predictors. These predictors were chosen based on their statistical significance and perceived impact on poverty rate. The new models for predicting poverty rate were:
+
+**M1**: burglary_per_million + murder_manslaughter_per_million
+
+**M2**: burglary_per_million + robbery_per_million
+
+**M3**: property_crime_per_million + robbery_per_million
+
+**M4**: murder_manslaughter_per_million + property_crime_per_million
+
+**M5**: burglary_per_million + rape_legacy_per_million
+
+```{r, include = FALSE}
+# Multiple Models (M1-M5): Multiple regression model with two predictors
+M1 = lm(Total~burglary_per_million+murder_manslaughter_per_million, data = model_data)
+```
+
+```{r, warning = FALSE, include = FALSE}
+train.model.func3=function(data){
+  mod = lm(Total~burglary_per_million+murder_manslaughter_per_million, data = data)
+  return(mod)
+}
+
+model_data4 = model_data %>%
+  crossv_kfold(5) %>%
+  mutate(tr.model = map(train, train.model.func3),
+        predict = map2(test, tr.model, ~augment(.y,newdata=.x))) %>%
+        dplyr::select(predict) %>%
+        unnest()
+```
+
+```{r, include = FALSE}
+M2 = lm(Total~burglary_per_million+robbery_per_million, data = model_data)
+```
+
+```{r, warning = FALSE, include = FALSE}
+train.model.func4=function(data){
+  mod = lm(Total~burglary_per_million+robbery_per_million, data = data)
+  return(mod)
+}
+
+model_data5 = model_data %>%
+  crossv_kfold(5) %>%
+  mutate(tr.model = map(train, train.model.func4),
+        predict = map2(test, tr.model, ~augment(.y,newdata=.x))) %>%
+        dplyr::select(predict) %>%
+        unnest()
+```
+
+```{r, include = FALSE}
+M3 = lm(Total~property_crime_per_million+robbery_per_million, data = model_data)
+```
+
+```{r, warning = FALSE, include = FALSE}
+train.model.func5=function(data){
+  mod = lm(Total~property_crime_per_million+robbery_per_million, data = data)
+  return(mod)
+}
+
+model_data6 = model_data %>%
+  crossv_kfold(5) %>%
+  mutate(tr.model = map(train, train.model.func5),
+        predict = map2(test, tr.model, ~augment(.y,newdata=.x))) %>%
+        dplyr::select(predict) %>%
+        unnest()
+```
+
+```{r, include = FALSE}
+M4 = lm(Total~murder_manslaughter_per_million+property_crime_per_million, data = model_data)
+```
+
+```{r, warning = FALSE, include = FALSE}
+train.model.func6=function(data){
+  mod = lm(Total~murder_manslaughter_per_million+property_crime_per_million, data = data)
+  return(mod)
+}
+
+model_data7 = model_data %>%
+  crossv_kfold(5) %>%
+  mutate(tr.model = map(train, train.model.func6),
+        predict = map2(test, tr.model, ~augment(.y,newdata=.x))) %>%
+        dplyr::select(predict) %>%
+        unnest()
+```
+
+```{r, include = FALSE}
+M5 = lm(Total~burglary_per_million+rape_legacy_per_million, data = model_data)
+```
+
+```{r, warning = FALSE, include = FALSE}
+train.model.func7=function(data){
+  mod = lm(Total~burglary_per_million+rape_legacy_per_million, data = data)
+  return(mod)
+}
+
+model_data8 = model_data %>%
+  crossv_kfold(5) %>%
+  mutate(tr.model = map(train, train.model.func7),
+        predict = map2(test, tr.model, ~augment(.y,newdata=.x))) %>%
+        dplyr::select(predict) %>%
+        unnest()
+```
+
+```{r, echo = FALSE}
+model_metrics = tibble(
+  Model = c("SW (no-way)", "SW (2-way)", "M1", "M2", "M3", "M4", "M5"),
+  RMSE = c(RMSE.func(model_data2$.resid), 
+           RMSE.func(model_data3$.resid), 
+           RMSE.func(model_data4$.resid),
+           RMSE.func(model_data5$.resid),
+           RMSE.func(model_data6$.resid),
+           RMSE.func(model_data7$.resid),
+           RMSE.func(model_data8$.resid)),
+  MSE = c(MSE.func(model_data2$.resid), 
+          MSE.func(model_data3$.resid), 
+          MSE.func(model_data4$.resid),
+          MSE.func(model_data5$.resid),
+          MSE.func(model_data6$.resid),
+          MSE.func(model_data7$.resid),
+          MSE.func(model_data8$.resid)),
+  MAE = c(MAE.func(model_data2$.resid), 
+          MAE.func(model_data3$.resid), 
+          MAE.func(model_data4$.resid),
+          MAE.func(model_data5$.resid),
+          MAE.func(model_data6$.resid),
+          MAE.func(model_data7$.resid),
+          MAE.func(model_data8$.resid)),
+  Adj.R.Squared = c(summary(stepwise_model)$adj.r.squared,
+                    summary(stepwise_2way_model)$adj.r.squared,
+                    summary(M1)$adj.r.squared,
+                    summary(M2)$adj.r.squared,
+                    summary(M3)$adj.r.squared,
+                    summary(M4)$adj.r.squared,
+                    summary(M5)$adj.r.squared))
+    
+model_metrics %>%
+  kbl(caption = "Comparsion of models predicting poverty rate") %>%
+  kable_styling()
+```
+```{r, echo = FALSE}
+RMSE_plot = model_metrics %>%
+  ggplot(aes(Model, RMSE)) +
+  geom_bar(stat="identity", fill = rep(c("darkred", "tan"), length.out = 7)) +
+  guides(x = guide_axis(angle = 90)) +
+  ggtitle("RMSE, Poverty Rate Models") +
+  theme_minimal()+
+  theme(plot.title = element_text(size = 10))
+
+MSE_plot = model_metrics %>%
+  ggplot(aes(Model, MSE)) +
+  geom_bar(stat="identity", fill = rep(c("darkred", "tan"), length.out = 7)) +
+  guides(x = guide_axis(angle = 90)) +
+  ggtitle("MSE, Poverty Rate Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+
+MAE_plot = model_metrics %>%
+  ggplot(aes(Model, MAE)) +
+  geom_bar(stat="identity", fill = rep(c("darkred", "tan"), length.out = 7)) +
+  guides(x = guide_axis(angle = 90)) +
+  ggtitle("MAE, Poverty Rate Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+
+ADJRSQ_plot = model_metrics %>%
+  ggplot(aes(Model, Adj.R.Squared)) +
+  geom_bar(stat="identity", fill = rep(c("darkred", "tan"), length.out = 7)) +
+  guides(x = guide_axis(angle = 90)) +
+  ggtitle("Adj. R-Squared, Poverty Rate Models") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 10))
+
+grid.arrange(RMSE_plot, MSE_plot, MAE_plot, ADJRSQ_plot,
+             layout_matrix=matrix(c(1,3,2,4),ncol=2))
+```
+
+Based on these metrics, we concluded that M1 was the best model for predicting a state’s poverty rate. M1 used the number of burglaries per million and the number of murders/manslaughters per million as predictor variables. For M1, the RMSE was 0.0241978, the MSE was 0.0005855, the MAE was 0.0190577, and the adjusted r-squared was 0.4409437. The adjusted r-squared means that about 44% of the variation in poverty rate is explained by burglary per million and murders/manslaughters per million. The error metrics we computed in the models for this question are considerably smaller than those of the first question, but it is important to note that this is because we are predicting the poverty rate, which is a proportion. On the contrary, the first question was predicting crime totals per million people, so the errors were significantly larger, as expected. Similar to the set of models in the first question, several of our models in this question had error metrics that were very close. A common predictor that our top three models contained was burglary per million people. This suggests that there could be a correlation between poverty and certain types of property crime like burglary. 
+
+
+# CONCLUSION
+
+In our first question, our group asked: Can we use economic indicators of a state in a given year to predict its violent crime and property crime totals?; If so, which type of crime are the indicators a better predictor of? We concluded that economic indicators were significant, albeit, weak predictors of crime; these indicators did predict property crimes better than violent crimes. These results were expected, confirming our hypothesis. The weakness of the predictors however, indicates that other variables, beyond those included in our study, must also be at play. Incorporating more variables to improve the accuracy of our model may produce stronger significance. Identifying communities in need for resource allocation is a feat that requires a wider perspective beyond observing crime data.  
+
+In our second question, we asked: Can we use crime data to predict a state's poverty rate? We concluded that crime data is a poor predictor of the poverty rate. These results were unexpected and disproved our hypothesis. We believe that the reasoning behind these discoveries is that there is a widespread misconception that poverty rates are solely, or the best, predictor of crime rates, and that legislation addressing crime should target areas with high poverty rates. However, as shown in our models, this is not necessarily the case. Perpetuating this belief may result in over-policing to already vulnerable communities. We must consider crime as a phenomenon that is very complicated in and of itself and that these collected totals may hide more specific factors. As the previous question showed, singling out crime and poverty together is statistically weak. Thus, in making policy decisions, it is important to understand our analysis and how our results contradict a common misconception. 
+
+In conclusion, our analysis is relevant and warrants further study. Future studies can continue this work by examining the relationship between crime and poverty in smaller communities. States are large and vary greatly, so drawing conclusions about an entire state is challenging. For instance, think of the wealth disparities that exist in a single city, let alone the whole state. Through disaggregation, policymakers can make targeted reforms in cities and towns. We suggest further investigating variables beyond violent and property crime. As seen in our results sections, the additional variables besides crime totals and poverty rates (state minimum wage, prisoner count, etc.) proved to be significant predictors themselves, although they don't tell the whole story. It would be worthwhile to examine interactions between certain variables like age and unemployment rate, rural versus urban residence and poverty rates, or even include political variables, such as party affiliation or voting statistics to further the research in this area. 
