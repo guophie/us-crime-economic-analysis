@@ -38,7 +38,7 @@ MSE.func = function(resid){
 
 RMSE.func = function(resid){
   return(sqrt(mean(resid^2)))
-}
+} 
 
 MAE.func = function(resid){
   return(mean(abs(resid)))
