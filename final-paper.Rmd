@@ -279,7 +279,7 @@ compare.fit <- data.frame(MSE = c(MSE.violent, MSE.property),
 rownames(compare.fit) <- c("Violent Crime Model", "Property Crime Model")
 #html table of df
 comparisons = compare.fit %>%
-  kbl(caption = "Comparsion of MSE, RMSE, MAE, Adjusted R-Squared: Stepwise Models") %>%
+  kbl(caption = "Comparison of MSE, RMSE, MAE, Adjusted R-Squared: Stepwise Models") %>%
   kable_styling()
 comparisons
 ```
@@ -517,7 +517,7 @@ ADJRSQ.plot.violent <- compare.violent %>%
 
 #html table
 compare.violent %>%
-  kbl(caption = "Comparsion of MSE, RMSE, MAE, Adjusted R-Squared: Violent Crime Models") %>%
+  kbl(caption = "Comparison of MSE, RMSE, MAE, Adjusted R-Squared: Violent Crime Models") %>%
   kable_styling()
 # arranged plots of each
 grid.arrange(MSE.plot.violent, RMSE.plot.violent, MAE.plot.violent, ADJRSQ.plot.violent,
@@ -657,7 +657,7 @@ ADJRSQ.plot.property <- compare.property %>%
 
 #html table
 compare.property %>%
-  kbl(caption = "Comparsion of MSE, RMSE, MAE, Adjusted R-Squared: Property Crime Models") %>%
+  kbl(caption = "Comparison of MSE, RMSE, MAE, Adjusted R-Squared: Property Crime Models") %>%
   kable_styling()
 # arrange plots
 grid.arrange(MSE.plot.property, RMSE.plot.property, MAE.plot.property, ADJRSQ.plot.property,
@@ -942,7 +942,7 @@ model_metrics = tibble(
                     summary(M5)$adj.r.squared))
     
 model_metrics %>%
-  kbl(caption = "Comparsion of models predicting poverty rate") %>%
+  kbl(caption = "Comparison of models predicting poverty rate") %>%
   kable_styling()
 ```
 ```{r, echo = FALSE}
